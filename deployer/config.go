@@ -1,10 +1,11 @@
 package deployer
 
 import (
+    "log"
     "errors"
-    "strings"
     "os"
     "os/exec"
+    "strings"
 	//"github.com/spf13/pflag"
     "github.com/spf13/viper"
     )
@@ -61,10 +62,11 @@ func NewConfig(dir string) (*Config) {
 */
 func (c *Config) Read(name string) (error) {
     
-    c.Name = name;
+    c.Name = strings.Join([]string{name, "conf"}, ".");
+    log.Print("Reading " + c.Name);
     c.Ref = viper.New();
     c.Ref.SetConfigType("toml");
-    c.Ref.SetConfigName(strings.Join([]string{c.Name, "conf"}, "."));
+    c.Ref.SetConfigName(c.Name);
     c.Ref.AddConfigPath(c.Dir);
     verr := c.Ref.ReadInConfig();
     if (verr != nil){

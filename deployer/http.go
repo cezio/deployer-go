@@ -4,14 +4,16 @@ import (
     "net/http"
     "strings"
     "io"
+    //"log"
 )
 
 
 
 
 func handleDeployment(w http.ResponseWriter, r *http.Request){
-    path := strings.Split(r.URL.Path, "/");
+    path := strings.Split(strings.Trim(r.URL.Path, "/"), "/");
     deployment_conf := path[len(path)-1];
+
     conf, err := NewConfigFromEnv();
     if (err != nil){
         w.WriteHeader(http.StatusNotFound);
@@ -28,7 +30,6 @@ func handleDeployment(w http.ResponseWriter, r *http.Request){
     w.WriteHeader(http.StatusOK);
     io.WriteString(w, "OK");
     return;
-    
 }
 
 
