@@ -9,8 +9,6 @@ import (
 
 
 func main(){
-
     mux := deployer.MakeMux();
     log.Fatal(http.ListenAndServe(":8081", mux));
-
 }

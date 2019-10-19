@@ -6,9 +6,70 @@ import (
     "os"
     "os/exec"
     "strings"
+    // "bytes"
+    //"fmt"
 	//"github.com/spf13/pflag"
     "github.com/spf13/viper"
     )
+
+
+type ConfigErrorType int
+
+const (
+    MissingConfig ConfigErrorType = iota
+    ReadError
+    ExecutionError
+)
+
+type ConfigError struct {
+    // error type
+    ErrorType ConfigErrorType
+    // message with error
+    Message string
+}
+
+
+func (c *ConfigError) IsMissingConfig() (bool) {
+    return c.ErrorType == MissingConfig;
+}
+
+func (c *ConfigError) IsReadError() (bool) {
+    return c.ErrorType == ReadError;
+}
+
+func (c *ConfigError) IsExecutionError() (bool) {
+    return c.ErrorType == ExecutionError;
+}
+
+func (c *ConfigError) Error() string {
+    return c.Message;
+
+}
+
+
+func run_config(deployment_path string) (*ConfigError){
+    conf, err := NewConfigFromEnv();
+    if (err != nil){
+        return &ConfigError{MissingConfig, "Path not found"};
+    }
+    cerr := conf.Read(deployment_path);
+    if (cerr != nil){
+        return &ConfigError{ReadError, cerr.Error()};
+        }
+    conf.Run();
+    return nil;
+}
+
+/**
+
+*/
+type RuntimeConfig struct {
+    // port to listen on
+    Port int
+    // directory with configuration
+    Dir string
+
+}
 
 
 
@@ -28,7 +89,6 @@ type Config struct {
     Env []string
     // conf parser instance
     Ref *(viper.Viper)
-    
     // command ref
     RefCmd *(exec.Cmd)
 }
@@ -61,12 +121,11 @@ func NewConfig(dir string) (*Config) {
     Read and parse config file from name
 */
 func (c *Config) Read(name string) (error) {
-    
     c.Name = strings.Join([]string{name, "conf"}, ".");
     log.Print("Reading " + c.Name);
     c.Ref = viper.New();
     c.Ref.SetConfigType("toml");
-    c.Ref.SetConfigName(c.Name);
+    c.Ref.SetConfigFile(c.Name);
     c.Ref.AddConfigPath(c.Dir);
     verr := c.Ref.ReadInConfig();
     if (verr != nil){
@@ -82,10 +141,18 @@ func (c *Config) Read(name string) (error) {
 
 
 func (c *Config) Run() (error) {
-    c.Commands = append([]string{"-c"}, c.Commands...)
-    cmd := exec.Command("/bin/bash", c.Commands...);
+
+    log.Print("Executing ", strings.Join(c.Commands, " "));
+    cmd := exec.Command(c.Commands[0], c.Commands[1:]...);
+
     c.RefCmd = cmd;
     cmd.Env = c.Env;
-    cmd.Start();
+
+    out, err := cmd.CombinedOutput();
+    if (err != nil){
+        log.Printf("Error during execution: %v %v", err, string(out));
+    } else {
+        log.Printf("Started..\n %v", string(out));
+    }
     return nil;
 }
