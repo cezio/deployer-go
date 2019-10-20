@@ -13,33 +13,37 @@ import (
 	"github.com/spf13/viper"
 )
 
-// ConfitErrorType type of error
+// ConfigErrorType type of error
 type ConfigErrorType int
 
 const (
-	// no configuration file
+	// MissingConfig no configuration file
 	MissingConfig ConfigErrorType = iota
-	// can't read config
+	// ReadError can't read config
 	ReadError
-	// execution failed
+	// ExecutionError execution failed
 	ExecutionError
 )
 
+// ConfigError keeps information on runtime config errors
 type ConfigError struct {
-	// error type
+	// ErrorType error type
 	ErrorType ConfigErrorType
-	// message with error
+	// Message with error
 	Message *string
 }
 
+// IsMissingConfig returns true if error is about missing config file
 func (c *ConfigError) IsMissingConfig() bool {
 	return c.ErrorType == MissingConfig
 }
 
+// IsReadError returns true if error is about unreadable config file
 func (c *ConfigError) IsReadError() bool {
 	return c.ErrorType == ReadError
 }
 
+// IsExecutionError returns true if error is about execution problem */
 func (c *ConfigError) IsExecutionError() bool {
 	return c.ErrorType == ExecutionError
 }
@@ -49,14 +53,14 @@ func (c *ConfigError) Error() *string {
 
 }
 
-func run_config(deployment_path string) *ConfigError {
+func runConfig(deploymentPath string) *ConfigError {
 	//    conf, err := NewConfigFromEnv();
-	conf, err := NewConfig(directory_path)
+	conf, err := NewConfig(configurationBase)
 	if err != nil {
 		var pathNotFoundMessage = "Path not found"
 		return &ConfigError{MissingConfig, &pathNotFoundMessage}
 	}
-	cerr := conf.Read(deployment_path)
+	cerr := conf.Read(deploymentPath)
 	if cerr != nil {
 		var msg = cerr.Error()
 		return &ConfigError{ReadError, &msg}
@@ -65,9 +69,7 @@ func run_config(deployment_path string) *ConfigError {
 	return nil
 }
 
-/**
-
- */
+// RuntimeConfig keeps runtime configuration
 type RuntimeConfig struct {
 	// port to listen on
 	Port int
@@ -75,37 +77,31 @@ type RuntimeConfig struct {
 	Dir string
 }
 
-/*
-   Deployment configuration structure
-*/
+// Config Deployment configuration structure
 type Config struct {
-	// directory where config file is
+	// Dir directory where config file is
 	Dir string
-	// name of config file
+	// Name of config file
 	Name string
-	// commands to execute
+	// Commands to execute (or one command with cli arguments split into list)
 	Commands []string
-	// log file to write output
+	// LogFile file to write output
 	LogFile string
-	// env overrides
+	// Env overrides
 	Env []string
-	// conf parser instance
+	// Ref conf parser instance
 	Ref *(viper.Viper)
-	// command ref
+	// RefCmd subcommand reference
 	RefCmd *(exec.Cmd)
 }
 
-/*
-   Create new Config from env variable
-*/
+// NewConfigFromEnv Create new Config from env variable
 func NewConfigFromEnv() (*Config, error) {
-	conf_dir := os.Getenv("DEPLOYER_CONFIG")
-	return NewConfig(conf_dir)
+	confDir := os.Getenv("DEPLOYER_CONFIG")
+	return NewConfig(confDir)
 }
 
-/*
-   Create new Config with dir set to dir
-*/
+// NewConfig Create new Config with dir set to dir
 func NewConfig(dir string) (*Config, error) {
 	if !IsDirectory(dir) {
 		return nil, errors.New("Path is not a directory")
@@ -115,9 +111,7 @@ func NewConfig(dir string) (*Config, error) {
 	return &c, nil
 }
 
-/*
-   Read and parse config file from name
-*/
+// Read and parse config file from name
 func (c *Config) Read(name string) error {
 	c.Name = strings.Join([]string{name, "conf"}, ".")
 	log.Print("Reading " + c.Name)
@@ -137,6 +131,7 @@ func (c *Config) Read(name string) error {
 	return nil
 }
 
+// Run runs command specified in configuration, returns nil
 func (c *Config) Run() error {
 
 	log.Print("Executing ", strings.Join(c.Commands, " "))
