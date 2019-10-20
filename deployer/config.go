@@ -21,6 +21,8 @@ const (
 	RequestGET RequestMethod = "GET"
 	// RequestPOST post method
 	RequestPOST RequestMethod = "POST"
+	// MaxSecretSize max size of secret body
+	MaxSecretSize int = 64
 )
 
 // RequestMethods contains list of allowed methods
@@ -71,17 +73,21 @@ func (c *ConfigError) IsReadError() bool {
 	return c.ErrorType == ReadError
 }
 
-// IsExecutionError returns true if error is about execution problem */
+// IsExecutionError returns true if error is about execution problem
 func (c *ConfigError) IsExecutionError() bool {
 	return c.ErrorType == ExecutionError
 }
 
-func (c *ConfigError) Error() *string {
-	return c.Message
-
+// IsPreconditionsError returns true if secret is invalid or mehtod is invalid
+func (c *ConfigError) IsPreconditionsError() bool {
+	return c.ErrorType == PreconditionsError
 }
 
-func runConfig(deploymentPath string, method string) *ConfigError {
+func (c *ConfigError) Error() *string {
+	return c.Message
+}
+
+func runConfig(deploymentPath string, method string, secret string) *ConfigError {
 	//    conf, err := NewConfigFromEnv();
 	conf, err := NewConfig(configurationBase)
 	if err != nil {
@@ -93,7 +99,11 @@ func runConfig(deploymentPath string, method string) *ConfigError {
 		var msg = cerr.Error()
 		return &ConfigError{ReadError, &msg}
 	}
-	exerr := conf.Run(method)
+	check := conf.Check(method, secret)
+	if check != nil {
+		return check
+	}
+	exerr := conf.Run()
 	if exerr != nil {
 		return exerr
 	}
@@ -127,7 +137,7 @@ type Config struct {
 	// PostOnly makrs that this config should be called from POST request only
 	AllowedMethods []RequestMethod
 	// Secret Required secret in body
-	Secret string
+	Secret *string
 }
 
 // NewConfigFromEnv Create new Config from env variable
@@ -163,8 +173,13 @@ func (c *Config) Read(name string) error {
 	if c.Ref.InConfig("log-to") {
 		c.LogFile = c.Ref.GetString("log-to")
 	}
-	c.Secret = c.Ref.GetString("secret")
-	c.AllowedMethods = RequestMethodsFromStrings(c.Ref.GetStringSlice("allowed-methods"))
+	if c.Ref.IsSet("secret") {
+		secret := c.Ref.GetString("secret")
+		c.Secret = &secret
+	}
+	if c.Ref.IsSet("allowed-methods") {
+		c.AllowedMethods = RequestMethodsFromStrings(c.Ref.GetStringSlice("allowed-methods"))
+	}
 	return nil
 }
 
@@ -172,7 +187,7 @@ func (c *Config) Read(name string) error {
 func (c *Config) AllowsMethod(method string) bool {
 	var methods = c.AllowedMethods
 	if methods == nil {
-		methods = make([]RequestMethod, 0)
+		methods = RequestMethods
 	}
 	for _, m := range methods {
 		if string(m) == method {
@@ -180,16 +195,33 @@ func (c *Config) AllowsMethod(method string) bool {
 		}
 	}
 	return false
+}
 
+// AllowedSecret checks if provided secret is correct
+func (c *Config) AllowedSecret(secret string) bool {
+	var sec = c.Secret
+	// null secret means no secret
+	if sec == nil {
+		return true
+	}
+	return *sec == secret
+}
+
+// Check runs pre-execution checks: allowed method check and secret check
+func (c *Config) Check(method string, secret string) *ConfigError {
+	if !c.AllowsMethod(method) {
+		var mmsg = "Method not allowed"
+		return &ConfigError{PreconditionsError, &mmsg}
+	}
+	if !c.AllowedSecret(secret) {
+		var smsg = "Secret mismatched"
+		return &ConfigError{PreconditionsError, &smsg}
+	}
+	return nil
 }
 
 // Run runs command specified in configuration, returns nil
-func (c *Config) Run(method string) *ConfigError {
-
-	if !c.AllowsMethod(method) {
-		var msg = "Method not allowed"
-		return &ConfigError{PreconditionsError, &msg}
-	}
+func (c *Config) Run() *ConfigError {
 
 	log.Print("Executing ", strings.Join(c.Commands, " "))
 	cmd := exec.Command(c.Commands[0], c.Commands[1:]...)
@@ -202,9 +234,7 @@ func (c *Config) Run(method string) *ConfigError {
 	if err != nil {
 		log.Printf("Error during execution: %v %v", err, outStr)
 		return &ConfigError{ExecutionError, &outStr}
-
 	}
 	log.Printf("Started..\n %v", outStr)
 	return nil
-
 }
