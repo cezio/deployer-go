@@ -11,7 +11,7 @@ func handleDeployment(w http.ResponseWriter, r *http.Request) {
 	var path = strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	var deploymentConf = path[len(path)-1]
 
-	var err = runConfig(deploymentConf)
+	var err = runConfig(deploymentConf, r.Method)
 	if err != nil {
 		if err.IsMissingConfig() {
 			io.WriteString(w, "Config "+deploymentConf+" not found: "+*err.Error())

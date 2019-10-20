@@ -13,6 +13,32 @@ import (
 	"github.com/spf13/viper"
 )
 
+// RequestMethod method that can be used for deployment
+type RequestMethod string
+
+const (
+	// RequestGET get method
+	RequestGET RequestMethod = "GET"
+	// RequestPOST post method
+	RequestPOST RequestMethod = "POST"
+)
+
+// RequestMethods contains list of allowed methods
+var RequestMethods = []RequestMethod{RequestGET, RequestPOST}
+
+// RequestMethodsFromStrings converts array of strings to array of request methods
+func RequestMethodsFromStrings(sIn []string) []RequestMethod {
+	out := make([]RequestMethod, 0)
+	for _, sva := range sIn {
+		for _, meth := range RequestMethods {
+			if sva == string(meth) {
+				out = append(out, meth)
+			}
+		}
+	}
+	return out
+}
+
 // ConfigErrorType type of error
 type ConfigErrorType int
 
@@ -21,6 +47,8 @@ const (
 	MissingConfig ConfigErrorType = iota
 	// ReadError can't read config
 	ReadError
+	// PreconditionsError invalid method or invalid secret
+	PreconditionsError
 	// ExecutionError execution failed
 	ExecutionError
 )
@@ -53,7 +81,7 @@ func (c *ConfigError) Error() *string {
 
 }
 
-func runConfig(deploymentPath string) *ConfigError {
+func runConfig(deploymentPath string, method string) *ConfigError {
 	//    conf, err := NewConfigFromEnv();
 	conf, err := NewConfig(configurationBase)
 	if err != nil {
@@ -65,7 +93,10 @@ func runConfig(deploymentPath string) *ConfigError {
 		var msg = cerr.Error()
 		return &ConfigError{ReadError, &msg}
 	}
-	conf.Run()
+	exerr := conf.Run(method)
+	if exerr != nil {
+		return exerr
+	}
 	return nil
 }
 
@@ -93,6 +124,10 @@ type Config struct {
 	Ref *(viper.Viper)
 	// RefCmd subcommand reference
 	RefCmd *(exec.Cmd)
+	// PostOnly makrs that this config should be called from POST request only
+	AllowedMethods []RequestMethod
+	// Secret Required secret in body
+	Secret string
 }
 
 // NewConfigFromEnv Create new Config from env variable
@@ -128,11 +163,33 @@ func (c *Config) Read(name string) error {
 	if c.Ref.InConfig("log-to") {
 		c.LogFile = c.Ref.GetString("log-to")
 	}
+	c.Secret = c.Ref.GetString("secret")
+	c.AllowedMethods = RequestMethodsFromStrings(c.Ref.GetStringSlice("allowed-methods"))
 	return nil
 }
 
+// AllowsMethod checks if given http method is allowed
+func (c *Config) AllowsMethod(method string) bool {
+	var methods = c.AllowedMethods
+	if methods == nil {
+		methods = make([]RequestMethod, 0)
+	}
+	for _, m := range methods {
+		if string(m) == method {
+			return true
+		}
+	}
+	return false
+
+}
+
 // Run runs command specified in configuration, returns nil
-func (c *Config) Run() error {
+func (c *Config) Run(method string) *ConfigError {
+
+	if !c.AllowsMethod(method) {
+		var msg = "Method not allowed"
+		return &ConfigError{PreconditionsError, &msg}
+	}
 
 	log.Print("Executing ", strings.Join(c.Commands, " "))
 	cmd := exec.Command(c.Commands[0], c.Commands[1:]...)
@@ -141,10 +198,13 @@ func (c *Config) Run() error {
 	cmd.Env = c.Env
 
 	out, err := cmd.CombinedOutput()
+	var outStr = string(out)
 	if err != nil {
-		log.Printf("Error during execution: %v %v", err, string(out))
-	} else {
-		log.Printf("Started..\n %v", string(out))
+		log.Printf("Error during execution: %v %v", err, outStr)
+		return &ConfigError{ExecutionError, &outStr}
+
 	}
+	log.Printf("Started..\n %v", outStr)
 	return nil
+
 }
