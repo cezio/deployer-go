@@ -2,10 +2,12 @@ package deployer
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 
 	// "bytes"
 	//"fmt"
@@ -51,6 +53,8 @@ const (
 	ReadError
 	// PreconditionsError invalid method or invalid secret
 	PreconditionsError
+	// SetupError cannot prepare execution environment
+	SetupError
 	// ExecutionError execution failed
 	ExecutionError
 )
@@ -81,6 +85,11 @@ func (c *ConfigError) IsExecutionError() bool {
 // IsPreconditionsError returns true if secret is invalid or mehtod is invalid
 func (c *ConfigError) IsPreconditionsError() bool {
 	return c.ErrorType == PreconditionsError
+}
+
+// IsSetupError returns true if preparation of execution has failed
+func (c *ConfigError) IsSetupError() bool {
+	return c.ErrorType == SetupError
 }
 
 func (c *ConfigError) Error() *string {
@@ -223,18 +232,34 @@ func (c *Config) Check(method string, secret string) *ConfigError {
 // Run runs command specified in configuration, returns nil
 func (c *Config) Run() *ConfigError {
 
+	lockfPath := fmt.Sprintf("%v.lock", c.Name)
+	lockf, lockfErr := os.OpenFile(lockfPath, os.O_RDONLY|os.O_CREATE, 0755)
+	if lockfErr != nil {
+		lockfErrMsg := fmt.Sprintf("Cannot open lock file: %v: %v", lockfPath, lockfErr.Error())
+		log.Printf(lockfErrMsg)
+		return &ConfigError{ExecutionError, &lockfErrMsg}
+	}
+	flockErr := syscall.Flock(int(lockf.Fd()), syscall.LOCK_EX)
+	if flockErr != nil {
+		flockfErrMsg := fmt.Sprintf("Cannot lock file: %v: %v", lockfPath, flockErr.Error())
+		log.Printf(flockfErrMsg)
+		return &ConfigError{SetupError, &flockfErrMsg}
+	}
+	defer syscall.Flock(int(lockf.Fd()), syscall.LOCK_UN)
+
 	log.Print("Executing ", strings.Join(c.Commands, " "))
 	cmd := exec.Command(c.Commands[0], c.Commands[1:]...)
-
 	c.RefCmd = cmd
 	cmd.Env = c.Env
-
 	out, err := cmd.CombinedOutput()
+	syscall.Flock(int(lockf.Fd()), syscall.LOCK_UN)
+
 	var outStr = string(out)
 	if err != nil {
 		log.Printf("Error during execution: %v %v", err, outStr)
 		return &ConfigError{ExecutionError, &outStr}
 	}
 	log.Printf("Started..\n %v", outStr)
+
 	return nil
 }

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`Deployer` is a simple server that receives requests and executes predefined commands on the server. This can be used for headless deployments, where you don't want to run whole CI/CD pipeline (I'm thinking of you, Jenkins), and simplest solution should be enough.
+`Deployer` is a simple server that receives a request (webhook preassumbly) and executes predefined commands on the server. This can be used for headless deployments, where you don't want to run whole CI/CD pipeline (I'm thinking of you, Jenkins), and the simplest solution should be enough.
 
 ## Workflow
 
@@ -13,15 +13,15 @@
 Configuration files should be stored in one directory. `$name` from URL is translated to `$name.conf` config file name. Each configuration should be a TOML file:
 
 ```
-## list of subprocess command and args
+## subprocess command and args, type: list of strings
 commands = ["/bin/bash",
             "/home/cezio/Projects/deployer-go/script.sh"]
 
-## env for subprocess
+## env for subprocess, type: list of strings
 env = ["DJANGO_SETTINGS_MODULE=myapp.local_settings"]
 ## a string with expected body contents, comment to leave it empty
 # secret =
-## list of allowed methods, comment to leave it empty
+## list of allowed methods, comment to leave it empty, type: list of strings
 allowed-methods= ['POST', 'GET']
 ```
 
@@ -31,6 +31,7 @@ Following keys are required:
 * `env` - a list of enviroment variables to pass to subcommand
 
 Optional keys:
+
 * `secret` - string with secret to be passed in body (leave commented to ignore secret)
 * `allowed-method` - list of http methods which are allowed for this config.
 
