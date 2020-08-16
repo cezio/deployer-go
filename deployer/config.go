@@ -229,21 +229,29 @@ func (c *Config) Check(method string, secret string) *ConfigError {
 	return nil
 }
 
-// Run runs command specified in configuration, returns nil
-func (c *Config) Run() *ConfigError {
-
+// DoLock Ensures that only one call will be executed at one time
+func (c *Config) DoLock() (*os.File, *ConfigError) {
 	lockfPath := fmt.Sprintf("%v.lock", c.Name)
 	lockf, lockfErr := os.OpenFile(lockfPath, os.O_RDONLY|os.O_CREATE, 0755)
 	if lockfErr != nil {
 		lockfErrMsg := fmt.Sprintf("Cannot open lock file: %v: %v", lockfPath, lockfErr.Error())
 		log.Printf(lockfErrMsg)
-		return &ConfigError{ExecutionError, &lockfErrMsg}
+		return nil, &ConfigError{ExecutionError, &lockfErrMsg}
 	}
 	flockErr := syscall.Flock(int(lockf.Fd()), syscall.LOCK_EX)
 	if flockErr != nil {
 		flockfErrMsg := fmt.Sprintf("Cannot lock file: %v: %v", lockfPath, flockErr.Error())
 		log.Printf(flockfErrMsg)
-		return &ConfigError{SetupError, &flockfErrMsg}
+		return nil, &ConfigError{SetupError, &flockfErrMsg}
+	}
+	return lockf, nil
+}
+
+// Run runs command specified in configuration, returns nil
+func (c *Config) Run() *ConfigError {
+	lockf, lerr := c.DoLock()
+	if lerr != nil {
+		return lerr
 	}
 	defer syscall.Flock(int(lockf.Fd()), syscall.LOCK_UN)
 
@@ -255,11 +263,13 @@ func (c *Config) Run() *ConfigError {
 	syscall.Flock(int(lockf.Fd()), syscall.LOCK_UN)
 
 	var outStr = string(out)
+
 	if err != nil {
-		log.Printf("Error during execution: %v %v", err, outStr)
+		log.Printf("Error during execution:\n %v \n %v", err, outStr)
 		return &ConfigError{ExecutionError, &outStr}
+	} else {
+		log.Printf("Executed..:\n %v", outStr)
 	}
-	log.Printf("Started..\n %v", outStr)
 
 	return nil
 }
