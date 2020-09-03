@@ -129,10 +129,12 @@ type RuntimeConfig struct {
 
 // Config Deployment configuration structure
 type Config struct {
-	// Dir directory where config file is
-	Dir string
-	// Name of config file
-	Name string
+	// DirName directory where config file is
+	DirName string
+	// RunDirName name of a directory where the command should be executed, default: DirName
+	RunDirName string
+	// ConfigName of config file
+	ConfigName string
 	// Commands to execute (or one command with cli arguments split into list)
 	Commands []string
 	// LogFile file to write output
@@ -140,7 +142,7 @@ type Config struct {
 	// Env overrides
 	Env []string
 	// Ref conf parser instance
-	Ref *(viper.Viper)
+	RefCfg *(viper.Viper)
 	// RefCmd subcommand reference
 	RefCmd *(exec.Cmd)
 	// PostOnly makrs that this config should be called from POST request only
@@ -161,33 +163,38 @@ func NewConfig(dir string) (*Config, error) {
 		return nil, errors.New("Path is not a directory")
 	}
 	c := Config{}
-	c.Dir = dir
+	c.DirName = dir
 	return &c, nil
 }
 
 // Read and parse config file from name
 func (c *Config) Read(name string) error {
-	c.Name = strings.Join([]string{name, "conf"}, ".")
-	log.Print("Reading " + c.Name)
-	c.Ref = viper.New()
-	c.Ref.SetConfigType("toml")
-	c.Ref.SetConfigFile(c.Name)
-	c.Ref.AddConfigPath(c.Dir)
-	verr := c.Ref.ReadInConfig()
+	c.ConfigName = strings.Join([]string{name, "conf"}, ".")
+	log.Print("Reading " + c.ConfigName)
+	c.RefCfg = viper.New()
+	c.RefCfg.SetConfigType("toml")
+	c.RefCfg.SetConfigFile(c.ConfigName)
+	c.RefCfg.AddConfigPath(c.DirName)
+	verr := c.RefCfg.ReadInConfig()
 	if verr != nil {
 		return verr
 	}
-	c.Commands = c.Ref.GetStringSlice("commands")
-	c.Env = c.Ref.GetStringSlice("env")
-	if c.Ref.InConfig("log-to") {
-		c.LogFile = c.Ref.GetString("log-to")
+	c.Commands = c.RefCfg.GetStringSlice("commands")
+	c.Env = c.RefCfg.GetStringSlice("env")
+	if c.RefCfg.IsSet("dir") {
+		c.RunDirName = c.RefCfg.GetString("dir")
+	} else {
+		c.RunDirName = c.DirName
 	}
-	if c.Ref.IsSet("secret") {
-		secret := c.Ref.GetString("secret")
+	if c.RefCfg.InConfig("log-to") {
+		c.LogFile = c.RefCfg.GetString("log-to")
+	}
+	if c.RefCfg.IsSet("secret") {
+		secret := c.RefCfg.GetString("secret")
 		c.Secret = &secret
 	}
-	if c.Ref.IsSet("allowed-methods") {
-		c.AllowedMethods = RequestMethodsFromStrings(c.Ref.GetStringSlice("allowed-methods"))
+	if c.RefCfg.IsSet("allowed-methods") {
+		c.AllowedMethods = RequestMethodsFromStrings(c.RefCfg.GetStringSlice("allowed-methods"))
 	}
 	return nil
 }
@@ -231,7 +238,7 @@ func (c *Config) Check(method string, secret string) *ConfigError {
 
 // DoLock Ensures that only one call will be executed at one time
 func (c *Config) DoLock() (*os.File, *ConfigError) {
-	lockfPath := fmt.Sprintf("%v.lock", c.Name)
+	lockfPath := fmt.Sprintf("%v.lock", c.ConfigName)
 	lockf, lockfErr := os.OpenFile(lockfPath, os.O_RDONLY|os.O_CREATE, 0755)
 	if lockfErr != nil {
 		lockfErrMsg := fmt.Sprintf("Cannot open lock file: %v: %v", lockfPath, lockfErr.Error())
@@ -257,19 +264,18 @@ func (c *Config) Run() *ConfigError {
 
 	log.Print("Executing ", strings.Join(c.Commands, " "))
 	cmd := exec.Command(c.Commands[0], c.Commands[1:]...)
+	// use config's dir as a workdir
+	cmd.Dir = c.RunDirName
 	c.RefCmd = cmd
 	cmd.Env = c.Env
 	out, err := cmd.CombinedOutput()
 	syscall.Flock(int(lockf.Fd()), syscall.LOCK_UN)
-
-	var outStr = string(out)
-
+	outStr := string(out)
 	if err != nil {
 		log.Printf("Error during execution:\n %v \n %v", err, outStr)
 		return &ConfigError{ExecutionError, &outStr}
-	} else {
-		log.Printf("Executed..:\n %v", outStr)
 	}
+	log.Printf("Executed..:\n %v", outStr)
 
 	return nil
 }

@@ -33,28 +33,36 @@ func handleDeployment(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if err.IsMissingConfig() {
 			w.WriteHeader(http.StatusNotFound)
-			io.WriteString(w, "Config "+deploymentConf+" not found: "+*err.Error())
+			io.WriteString(w, "Config "+deploymentConf+" not found: "+(*err.Error()))
+			io.WriteString(w, "\n")
 			return
 		}
 		if err.IsReadError() {
 			w.WriteHeader(http.StatusInternalServerError)
-			io.WriteString(w, "Config "+deploymentConf+" error: "+*err.Error())
+			io.WriteString(w, "Config "+deploymentConf+" error: "+(*err.Error()))
+			io.WriteString(w, "\n")
 			return
 		}
 		if err.IsExecutionError() {
 			w.WriteHeader(http.StatusInternalServerError)
-			io.WriteString(w, "Config "+deploymentConf+" execution error: "+*err.Error())
+			io.WriteString(w, "Config "+deploymentConf+" execution error: "+(*err.Error()))
+			io.WriteString(w, "\n")
 			return
 		}
 		if err.IsPreconditionsError() {
 			w.WriteHeader(http.StatusBadRequest)
-			io.WriteString(w, "Config "+deploymentConf+" preconditions error: "+*err.Error())
+			io.WriteString(w, "Config "+deploymentConf+" preconditions error: "+(*err.Error()))
+			io.WriteString(w, "\n")
 			return
 		}
-	} else {
-		w.WriteHeader(http.StatusOK)
-		io.WriteString(w, "OK")
+		w.WriteHeader(http.StatusInternalServerError)
+		io.WriteString(w, "Config "+deploymentConf+" unknown error: "+(*err.Error()))
+		io.WriteString(w, "\n")
+		return
+
 	}
+	w.WriteHeader(http.StatusOK)
+	io.WriteString(w, "OK")
 	return
 }
 
