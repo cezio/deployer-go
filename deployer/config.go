@@ -127,8 +127,8 @@ type RuntimeConfig struct {
 	Dir string
 }
 
-// Config Deployment configuration structure
-type Config struct {
+// DeploymentConfig Deployment configuration structure
+type DeploymentConfig struct {
 	// DirName directory where config file is
 	DirName string
 	// RunDirName name of a directory where the command should be executed, default: DirName
@@ -152,23 +152,23 @@ type Config struct {
 }
 
 // NewConfigFromEnv Create new Config from env variable
-func NewConfigFromEnv() (*Config, error) {
+func NewConfigFromEnv() (*DeploymentConfig, error) {
 	confDir := os.Getenv("DEPLOYER_CONFIG")
 	return NewConfig(confDir)
 }
 
 // NewConfig Create new Config with dir set to dir
-func NewConfig(dir string) (*Config, error) {
+func NewConfig(dir string) (*DeploymentConfig, error) {
 	if !IsDirectory(dir) {
 		return nil, errors.New("Path is not a directory")
 	}
-	c := Config{}
+	c := DeploymentConfig{}
 	c.DirName = dir
 	return &c, nil
 }
 
 // Read and parse config file from name
-func (c *Config) Read(name string) error {
+func (c *DeploymentConfig) Read(name string) error {
 	c.ConfigName = strings.Join([]string{name, "conf"}, ".")
 	log.Print("Reading " + c.ConfigName)
 	c.RefCfg = viper.New()
@@ -200,7 +200,7 @@ func (c *Config) Read(name string) error {
 }
 
 // AllowsMethod checks if given http method is allowed
-func (c *Config) AllowsMethod(method string) bool {
+func (c *DeploymentConfig) AllowsMethod(method string) bool {
 	var methods = c.AllowedMethods
 	if methods == nil {
 		methods = RequestMethods
@@ -214,7 +214,7 @@ func (c *Config) AllowsMethod(method string) bool {
 }
 
 // AllowedSecret checks if provided secret is correct
-func (c *Config) AllowedSecret(secret string) bool {
+func (c *DeploymentConfig) AllowedSecret(secret string) bool {
 	var sec = c.Secret
 	// null secret means no secret
 	if sec == nil {
@@ -224,7 +224,7 @@ func (c *Config) AllowedSecret(secret string) bool {
 }
 
 // Check runs pre-execution checks: allowed method check and secret check
-func (c *Config) Check(method string, secret string) *ConfigError {
+func (c *DeploymentConfig) Check(method string, secret string) *ConfigError {
 	if !c.AllowsMethod(method) {
 		var mmsg = "Method not allowed"
 		return &ConfigError{PreconditionsError, &mmsg}
@@ -237,7 +237,7 @@ func (c *Config) Check(method string, secret string) *ConfigError {
 }
 
 // DoLock Ensures that only one call will be executed at one time
-func (c *Config) DoLock() (*os.File, *ConfigError) {
+func (c *DeploymentConfig) DoLock() (*os.File, *ConfigError) {
 	lockfPath := fmt.Sprintf("%v.lock", c.ConfigName)
 	lockf, lockfErr := os.OpenFile(lockfPath, os.O_RDONLY|os.O_CREATE, 0755)
 	if lockfErr != nil {
@@ -255,7 +255,7 @@ func (c *Config) DoLock() (*os.File, *ConfigError) {
 }
 
 // Run runs command specified in configuration, returns nil
-func (c *Config) Run() *ConfigError {
+func (c *DeploymentConfig) Run() *ConfigError {
 	lockf, lerr := c.DoLock()
 	if lerr != nil {
 		return lerr
@@ -264,10 +264,11 @@ func (c *Config) Run() *ConfigError {
 
 	log.Print("Executing ", strings.Join(c.Commands, " "))
 	cmd := exec.Command(c.Commands[0], c.Commands[1:]...)
+	c.RefCmd = cmd
 	// use config's dir as a workdir
 	cmd.Dir = c.RunDirName
-	c.RefCmd = cmd
-	cmd.Env = c.Env
+	// prepare env based on current + config
+	cmd.Env = *(c.PrepareEnv())
 	out, err := cmd.CombinedOutput()
 	syscall.Flock(int(lockf.Fd()), syscall.LOCK_UN)
 	outStr := string(out)
@@ -278,4 +279,12 @@ func (c *Config) Run() *ConfigError {
 	log.Printf("Executed..:\n %v", outStr)
 
 	return nil
+}
+
+// PrepareEnv returns an array of env entries: local env + entries from configuration
+func (c *DeploymentConfig) PrepareEnv() *([]string) {
+	env := make([]string, 0)
+	copy(env, c.Env)
+	env = append(env, c.Env...)
+	return &env
 }
