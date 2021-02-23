@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"./deployer"
+	"../deployer"
 )
 
 type cliFlags struct {

@@ -1,7 +1,9 @@
 #!/bin/bash
 
 echo 'rebuilding..'
-go build .
+
+go build src/
+
 BUILD_EX=$?
 if [[ ! $BUILD_EX -eq 0 ]]; then
     echo 'error when compiling'
