@@ -10,17 +10,26 @@ import (
 )
 
 type cliFlags struct {
-	port      int
-	directory string
+	Port      int
+	Directory string
 }
 
 func main() {
 
-	var flags = cliFlags{8081, "."}
-	flag.Int("port", flags.port, "Port to listen on (default: 8081)")
-	flag.String("configdir", flags.directory, "Directory to read from (default: .)")
+	// default flags
+	const (
+		defaultPort      = 8081
+		defaultConfigDir = "."
+	)
+
+	// cli parser
+
+	var port = flag.Int("port", defaultPort, "Port to listen on (default: 8081)")
+	var configdir = flag.String("configdir", defaultConfigDir, "Directory to read from (default: .)")
 
 	flag.Parse()
-	mux := deployer.MakeMux(flags.directory)
-	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(flags.port), mux))
+	log.Printf("starting with configuration:\n port: %v\n config dir: %v\n", *port, *configdir)
+
+	mux := deployer.MakeMux(*configdir)
+	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(*port), mux))
 }

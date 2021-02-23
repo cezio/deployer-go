@@ -10,4 +10,4 @@ if [[ ! $BUILD_EX -eq 0 ]]; then
     exit 1
 fi;
 echo 'serving..'
-DEPLOYER_CONFIG=. ./deployer-go
+DEPLOYER_CONFIG=. ./deployer-go -port 8080

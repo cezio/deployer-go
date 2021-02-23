@@ -184,10 +184,11 @@ func (c *DeploymentConfig) Read(name string) error {
 	log.Print("Reading " + c.ConfigName)
 	c.RefCfg = viper.New()
 	c.RefCfg.SetConfigType("toml")
-	c.RefCfg.SetConfigFile(c.ConfigName)
+	c.RefCfg.SetConfigName(c.ConfigName)
 	c.RefCfg.AddConfigPath(c.DirName)
 	verr := c.RefCfg.ReadInConfig()
 	if verr != nil {
+		log.Printf("Error when reading config %v: %v", c.ConfigName, verr)
 		return verr
 	}
 	c.Commands = c.RefCfg.GetStringSlice("commands")

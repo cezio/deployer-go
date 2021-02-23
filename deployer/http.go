@@ -4,7 +4,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	//"log"
 )
 
 func readSecret(c *DeploymentConfig, r *http.Request) (*string, *ConfigError) {
