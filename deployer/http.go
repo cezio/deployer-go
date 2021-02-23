@@ -7,23 +7,36 @@ import (
 	//"log"
 )
 
+func readSecret(c *DeploymentConfig, r *http.Request) (*string, *ConfigError) {
+	if c.Secret == nil {
+		return nil, nil
+	}
+	if c.SecretHeader != nil {
+		var secret = r.Header.Get(*c.SecretHeader)
+		return &secret, nil
+	} else {
+		var bodyReader = r.Body
+		if bodyReader == nil {
+			bmsg := "Body is empty"
+			return nil, &ConfigError{PreconditionsError, &bmsg}
+		}
+		var secret = make([]byte, MaxSecretSize)
+		var read, rerr = bodyReader.Read(secret)
+		if rerr != nil {
+			/* rmsg := rerr.Error()
+			return deploymentConf, &ConfigError{PreconditionsError, &rmsg}
+			*/
+		}
+		var secretStr = string(secret[:read])
+		return &secretStr, nil
+	}
+
+}
+
 func runConfigFromRequest(r *http.Request) (string, *ConfigError) {
 	var path = strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	var deploymentConf = path[len(path)-1]
-	var bodyReader = r.Body
-	if bodyReader == nil {
-		bmsg := "Body is empty"
-		return deploymentConf, &ConfigError{PreconditionsError, &bmsg}
-	}
-	var secret = make([]byte, MaxSecretSize)
-	var read, rerr = bodyReader.Read(secret)
-	if rerr != nil {
-		/* rmsg := rerr.Error()
-		return deploymentConf, &ConfigError{PreconditionsError, &rmsg}
-		*/
-	}
-	secret = secret[:read]
-	var err = runConfig(deploymentConf, r.Method, string(secret))
+	var err = runConfig(deploymentConf, r)
 
 	return deploymentConf, err
 }

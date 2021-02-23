@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"../deployer"
+	"github.com/cezio/deployer-go/deployer"
 )
 
 type cliFlags struct {

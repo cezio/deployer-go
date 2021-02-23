@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -93,8 +94,8 @@ func (c *ConfigError) Error() *string {
 	return c.Message
 }
 
-func runConfig(deploymentPath string, method string, secret string) *ConfigError {
-	//    conf, err := NewConfigFromEnv();
+func runConfig(deploymentPath string, r *http.Request) *ConfigError {
+	// configurationBase from http.go
 	conf, err := NewConfig(configurationBase)
 	if err != nil {
 		var pathNotFoundMessage = "Path not found"
@@ -105,9 +106,20 @@ func runConfig(deploymentPath string, method string, secret string) *ConfigError
 		var msg = cerr.Error()
 		return &ConfigError{ReadError, &msg}
 	}
-	check := conf.Check(method, secret)
-	if check != nil {
-		return check
+	var method = r.Method
+	var secret, serr = readSecret(conf, r)
+	// non-empty error
+	if serr != nil {
+		var msg = serr.Error()
+		return &ConfigError{ReadError, msg}
+
+	}
+	// check if the secret is correct, if it's provided
+	if secret != nil {
+		check := conf.Check(method, *secret)
+		if check != nil {
+			return check
+		}
 	}
 	exerr := conf.Run()
 	if exerr != nil {
@@ -144,8 +156,10 @@ type DeploymentConfig struct {
 	RefCmd *(exec.Cmd)
 	// PostOnly makrs that this config should be called from POST request only
 	AllowedMethods []RequestMethod
-	// Secret Required secret in body
+	// Secret Required secret in body (if SecretHeader is omited)
 	Secret *string
+	// Secret stored in this header instead of body
+	SecretHeader *string
 }
 
 // NewConfigFromEnv Create new Config from env variable
@@ -189,6 +203,10 @@ func (c *DeploymentConfig) Read(name string) error {
 	if c.RefCfg.IsSet("secret") {
 		secret := c.RefCfg.GetString("secret")
 		c.Secret = &secret
+	}
+	if c.RefCfg.IsSet("secret-header") {
+		secretHeader := c.RefCfg.GetString("secret-header")
+		c.SecretHeader = &secretHeader
 	}
 	if c.RefCfg.IsSet("allowed-methods") {
 		c.AllowedMethods = RequestMethodsFromStrings(c.RefCfg.GetStringSlice("allowed-methods"))

@@ -21,6 +21,8 @@ commands = ["/bin/bash",
 env = ["DJANGO_SETTINGS_MODULE=myapp.local_settings"]
 ## a string with expected body contents, comment to leave it empty
 # secret =
+## optional name of the header where the secret will be delivered
+# secret-header = 
 ## list of allowed methods, comment to leave it empty, type: list of strings
 allowed-methods= ['POST', 'GET']
 ```

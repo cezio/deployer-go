@@ -2,7 +2,7 @@
 
 echo 'rebuilding..'
 
-go build src/
+go build .
 
 BUILD_EX=$?
 if [[ ! $BUILD_EX -eq 0 ]]; then
